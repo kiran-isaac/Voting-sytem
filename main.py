@@ -3,6 +3,7 @@ import datetime
 import random
 import hashlib
 import userInput
+import names
 import os
 
 def getRandomDate():
@@ -23,7 +24,31 @@ cursor = db.cursor(dictionary=True)
 def editStudents(tutor):
     menu = """{0} students menu :
     1) View students
-    2) 
+    2) PLACEHOLDER
+""".format(tutor)
+
+    menuChoice = userInput.chooseFromList(int, menu, [1, 2])
+
+    if menuChoice:
+        viewStudents(tutor)
+
+def viewStudents(tutor):
+    stmt = "SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor)
+    cursor.execute(stmt)
+
+    students = cursor.fetchall()
+
+    if not students:
+        print("There are no students in " + tutor)
+        return
+
+    idColumnWidth = max(3, max([len(str(student["studentID"])) for student in students]))
+    columnWidth = max(16, max([len(student["studentName"]) for student in students] + [len(student["dob"].strftime("%d %B %y")) for student in students]))
+    row = "{0:<" + str(idColumnWidth) + "} | {1:<" + str(columnWidth) + "} | {2:<" + str(columnWidth) + "}"
+    print(row.format("ID", "Name", "Date of birth"))
+    print("_" * idColumnWidth + "_|_" +"_" * columnWidth + "_|_" + "_" * columnWidth)
+    for student in students:
+        print(row.format(student["studentID"], student["studentName"], student["dob"].strftime("%d %B %y")))
 
 def addStudent(name, dob, tutor):
     global cursor
@@ -137,8 +162,6 @@ def adminMenu(tutor):
     3) Placeholder
 """.format(tutor)
 
-    print(menu)
-
     menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3])
 
     if menuChoice == 1:
@@ -159,4 +182,5 @@ def menu():
         if tutor:
             adminMenu(tutor)
 
-menu()
+#menu()
+viewStudents("11m")
