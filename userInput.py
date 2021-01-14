@@ -39,7 +39,7 @@ def chooseFromList(inputType, prompt, validate = None, error=None, caseSensetive
             errorString += penultimate + " or " + last
             outputFunc(errorString)
 
-def getNumInRange(inputType, prompt, mode = None, validate = None, error=None, caseSensetive = True, inputFunc = input, outputFunc = print):
+def getNumInRange(inputType, prompt, validate = None, error=None, inputFunc = input, outputFunc = print):
     if inputType not in [float, int]:
         raise ValueError("Input type must be int or float")
     response = ""
@@ -81,12 +81,12 @@ def yesno(prompt, error=None, inputFunc = input, outputFunc = print):
             else:
                 outputFunc("Please choose yes or no")
 
-def getStringInput(prompt, regex, error=None, inputFunc = input, outputFunc = print):
+def getStringInput(prompt, regex, choice=None, error=None, inputFunc = input, outputFunc = print):
     while True:
         response = inputFunc(prompt)
                 
         import re
-        if re.search(regex, response):
+        if re.search(regex, response) or choice and response in choice:
             return response
         else:
             if error:
@@ -94,8 +94,8 @@ def getStringInput(prompt, regex, error=None, inputFunc = input, outputFunc = pr
             else:
                 outputFunc("Invalid entry")
 
-def getDate(prompt, error = None, inputFunc = input, outputFunc = print):
-    return getStringInput(prompt, "(^(((0[1-9]|1[0-9]|2[0-8])[\/](0[1-9]|1[012]))|((29|30|31)[\/](0[13578]|1[02]))|((29|30)[\/](0[4,6,9]|11)))[\/](19|[2-9][0-9])\d\d$)|(^29[\/]02[\/](19|[2-9][0-9])(00|04|08|12|16|20|24|28|32|36|40|44|48|52|56|60|64|68|72|76|80|84|88|92|96)$)", error, inputFunc, outputFunc)
+def getDate(prompt, choice = None, error = None, inputFunc = input, outputFunc = print):
+    return getStringInput(prompt, "(^(((0[1-9]|1[0-9]|2[0-8])[\/](0[1-9]|1[012]))|((29|30|31)[\/](0[13578]|1[02]))|((29|30)[\/](0[4,6,9]|11)))[\/](19|[2-9][0-9])\d\d$)|(^29[\/]02[\/](19|[2-9][0-9])(00|04|08|12|16|20|24|28|32|36|40|44|48|52|56|60|64|68|72|76|80|84|88|92|96)$)", choice, error, inputFunc, outputFunc)
 
 def setPassword(confirm = False, prompt = None, outputFunc = print): 
     import stdiomask
