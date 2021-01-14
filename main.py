@@ -90,6 +90,16 @@ def printStudents(students):
         print(row.format(student["studentID"], student["studentName"], student["dob"].strftime("%d %B %y")))
     return len(students)
 
+def deleteCandidates(tutor):
+    cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    students = cursor.fetchall()
+
+    if not students:
+        print("There are no canidates in {0}".format(tutor))
+        return
+    
+    
+
 def nominateCandidates(tutor):
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
