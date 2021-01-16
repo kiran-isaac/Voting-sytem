@@ -23,13 +23,12 @@ cursor = db.cursor(dictionary=True)
 
 def editCandidates(tutor):
     while True:
-        menu = """{0} candidates menu :
+        menu = """\n{0} candidates menu :
     1) View candidates
     2) Nominate candidates
     3) Remove candidates
     4) Return to student menu
 """.format(tutor)
-
         menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3, 4])
 
         if menuChoice == 1:
@@ -44,10 +43,9 @@ def editCandidates(tutor):
         elif menuChoice == 2:
             nominateCandidates(tutor)
         elif menuChoice == 3:
-            pass
+            removeCandidates(tutor)
         elif menuChoice == 4:
             return
-
 
 def editStudents(tutor):
     while True:
@@ -90,16 +88,26 @@ def printStudents(students):
         print(row.format(student["studentID"], student["studentName"], student["dob"].strftime("%d %B %y")))
     return len(students)
 
-def deleteCandidates(tutor):
+def removeCandidates(tutor):
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
 
-    if not students:
+    if not len(students):
         print("There are no canidates in {0}".format(tutor))
         return
-    
-    
 
+    while len(students):
+        cursor.execute("SELECT * FROM students WHERE studentID IN {0}".format(str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
+        students = cursor.fetchall()
+        print("Current candidates: ")
+        printStudents(students)
+        print()
+        ids = [student["studentID"] for student in students]
+        id = userInput.chooseFromList(int, "Enter the student ID of the candidate you wish to remove: ", ids)
+        nominateCandidate(id)
+        cursor.execute("SELECT studentName FROM students WHERE studentID = {0}".format(id))
+        print("{0} nominated".format(cursor.fetchone()["studentName"]))
+    
 def nominateCandidates(tutor):
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
@@ -115,8 +123,6 @@ def nominateCandidates(tutor):
     if no <= 0:
         print("No more candidates can be nominated")
         return
-
-    no = userInput.getNumInRange(int, "How many candidates do you want to nominate? (you can nominates up to {0} more): ".format(no), (1, no))
 
     cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
@@ -157,6 +163,10 @@ def nominateCandidates(tutor):
             cursor.execute("SELECT studentName FROM students WHERE studentID = {0}".format(id))
             print("{0} nominated".format(cursor.fetchone()["studentName"]))
             counter -= 1
+
+        if not userInput.yesno("Nominate another candiate? "):
+            return
+    print("You have reached the maximum number of candidates")
 
 def nominateCandidate(studentID):
     stmt = (
@@ -322,4 +332,4 @@ def menu():
         elif menuChoice == 3:
             exit()
 
-nominateCandidates("11m")
+editStudents("11m")
