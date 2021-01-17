@@ -1,4 +1,4 @@
-def chooseFromList(inputType, prompt, validate = None, error=None, caseSensetive = True, inputFunc = input, outputFunc = print):
+def chooseFromList(inputType, prompt, validate, error=None, caseSensetive = True, inputFunc = input, outputFunc = print):
     while True:
         if inputType == str:
             response = inputFunc(prompt)
@@ -31,13 +31,22 @@ def chooseFromList(inputType, prompt, validate = None, error=None, caseSensetive
         if error:
             outputFunc(error)
         else:
-            errorString = "Please choose one from "
-            last = str(validate.pop())
-            penultimate = str(validate.pop())
-            for item in validate:
-                errorString += str(item) + ", "
-            errorString += penultimate + " or " + last
-            outputFunc(errorString)
+            if len(validate) >= 2:
+                errorString = "Please choose one from "
+                last = str(validate.pop())
+                penultimate = str(validate.pop())
+                for item in validate:
+                    errorString += str(item) + ", "
+                outputFunc(errorString + "{0} or {1}".format(penultimate, last))
+                validate.append(penultimate)
+                validate.append(last)
+            elif len(validate) == 1:
+                last = validate.pop()
+                outputFunc("Please choose {0}".format(last))
+                validate.append(last)
+            else:
+                raise IndexError("The parameter 'validate' must not be an empty list")
+                
 
 def getNumInRange(inputType, prompt, validate = None, error=None, inputFunc = input, outputFunc = print):
     if inputType not in [float, int]:
