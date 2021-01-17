@@ -224,7 +224,7 @@ def removeStudents(tutor):
         cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
         students = cursor.fetchall()
 
-        if not len(students):
+        if not len(students): 
             print("There are no canidates in {0}".format(tutor))
 
         print("Current {} students: ".format(tutor))
