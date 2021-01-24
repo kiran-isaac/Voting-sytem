@@ -14,7 +14,7 @@ def getRandomDate():
 
 db = mysql.connector.connect(
     user="root", 
-    password="StinkPig37",
+    password="root",
     host="127.0.0.1",
     database="vote"
 )
@@ -76,16 +76,33 @@ def editStudents(tutor):
         elif menuChoice == 4:
             return
 
+def removeCandidate(id):
+    cursor.execute("DELETE FROM candidates WHERE studentID='{0}'".format(id))
+    db.commit()
+
 def printStudents(students):
     idColumnWidth = max(3, max([len(str(student["studentID"])) for student in students]))
     columnWidth = max(16, max([len(student["studentName"]) for student in students] + [len(student["dob"].strftime("%d %B %y")) for student in students]))
     
+    row = "{0:<" + str(idColumnWidth) + "} | {1:<" + str(columnWidth) + "} | {2:<" + str(columnWidth) + "} | {3:<" + str(10) + "} | {4:<" + str(10) + "}"
+    print(row.format("ID", "Name", "Date of birth", "Voted", "Abstained"))
+    print("_" * idColumnWidth + "_|_" + "_" * columnWidth + "_|_" + "_" * columnWidth + ("_|_" + "_" * 10)*2)
+    for student in students:
+        voted = "yes" if student["voted"] else "no"
+        abstained = "yes" if student["abstained"] else "no"
+        print(row.format(student["studentID"], student["studentName"], student["dob"].strftime("%d %B %y"), voted, abstained))
+    return len(students)
+
+def printCandidates(candidates):
+    idColumnWidth = max(3, max([len(str(student["studentID"])) for student in candidates]))
+    columnWidth = max(16, max([len(student["studentName"]) for student in candidates] + [len(student["dob"].strftime("%d %B %y")) for student in candidates]))
+    
     row = "{0:<" + str(idColumnWidth) + "} | {1:<" + str(columnWidth) + "} | {2:<" + str(columnWidth) + "}"
     print(row.format("ID", "Name", "Date of birth"))
-    print("_" * idColumnWidth + "_|_" +"_" * columnWidth + "_|_" + "_" * columnWidth)
-    for student in students:
+    print("_" * idColumnWidth + "_|_" + "_" * columnWidth + "_|_" + "_" * columnWidth)
+    for student in candidates:
         print(row.format(student["studentID"], student["studentName"], student["dob"].strftime("%d %B %y")))
-    return len(students)
+    return len(candidates)
 
 def removeCandidates(tutor):
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
@@ -99,11 +116,12 @@ def removeCandidates(tutor):
         print()
         ids = [student["studentID"] for student in students]
         id = userInput.chooseFromList(int, "Enter the student ID of the candidate you wish to remove: ", ids)
-        cursor.execute("DELETE FROM candidates WHERE studentID='{0}'".format(id))
+        
+        removeCandidate(id)
+
         cursor.execute("SELECT studentName FROM students WHERE studentID={0}".format(id))
         print("{0} removed".format(cursor.fetchone()["studentName"]))
 
-        db.commit()
 
         cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
         students = cursor.fetchall()
@@ -177,8 +195,8 @@ def nominateCandidates(tutor):
 
 def nominateCandidate(studentID):
     stmt = (
-        "INSERT INTO candidates(studentID) "
-        "VALUES ({0})"
+        "INSERT INTO candidates(studentID, votes) "
+        "VALUES ({0}, 0)"
     ).format(studentID)
     cursor.execute(stmt)
     db.commit()
@@ -209,16 +227,20 @@ def addStudents(tutor):
 
     print("Enter 'exit' at any time to stop")
     for i in range(no):
-        print("STUDENT NO {0}".format(i+1))
-        name = userInput.getStringInput("Please enter their full name: ", nameRegex, ["exit"])
-        if name == "exit":
-            return
-        dob = datetime.datetime.strptime(userInput.getDate("Please enter their date of birth", ["exit"]), "%d/%m/%y")
-        if dob == "exit":
-            return
-        addStudent(name, dob, tutor)
-        print()
-
+        while True:
+            print("STUDENT NO {0}".format(i+1))
+            name = userInput.getStringInput("Please enter their full name: ", nameRegex, ["exit"], "Name must only comtain letters, spaces, dashes, '-'. '.', ',' or '''")
+            if name == "exit":
+                return
+            dobInput = userInput.getDate("Please enter their date of birth: ", ["exit"])
+            dob = datetime.datetime.strptime(dobInput, "%d/%m/%Y")
+            if dob == "exit":
+                return
+            if userInput.yesno("Is this correct? : '{0}' born on '{1}'".format(name, dobInput)):
+                addStudent(name, dob, tutor)
+                print()
+                break
+    
 def removeStudents(tutor):
     while True:
         cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
@@ -231,23 +253,64 @@ def removeStudents(tutor):
         printStudents(students)
         print()
 
-        ids = [student["studentID"] for student in students]
-        id = userInput.chooseFromList(int, "Enter the student ID of the student you wish to remove from your tutor: ", ids, "Please choose a valid student ID")
-        
-        cursor.execute("SELECT studentName FROM students WHERE studentID={0}".format(id))
-        name = cursor.fetchone()["studentName"]
-        
-        cursor.execute("DELETE FROM student_in_tutor WHERE studentID='{0}'".format(id))
-        cursor.execute("DELETE FROM students WHERE studentID='{0}'".format(id))
-        
-        print("{0} removed".format(name))
+        nameRegex = "^[a-zA-Z,.'-]+$"
+        while students:
+            cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+            students = cursor.fetchall()
+            if not students:
+                print("There are no students in {0}".format(0))
+                return
+            firstName = userInput.getStringInput("Please enter the first name of the person you wish to delete, or type view to see all students: ", nameRegex, ["view"])
+            if firstName == "view":
+                cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+                students = cursor.fetchall()
+                printStudents(students)
+                print()
+                continue
+            stmt = (
+                "SELECT * FROM students WHERE "
+                "studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}') AND "
+                "studentName LIKE '{1}%'"
+            ).format(tutor, firstName)
+            cursor.execute(stmt)
+            students = cursor.fetchall()
+            if len(students) == 0:
+                print("There are no students in {0} with that name".format(tutor))
+                continue
+            elif len(students) == 1:
+                student = students[0]
+                if userInput.yesno("Do you mean {0}, born on {1}?: ".format(student["studentName"], student["dob"].strftime("%d %B %y"))):
+                    removeStudent(student["studentID"])
+                    print("{0} removed".format(student["studentName"]))
+                else:
+                    continue
+            else:
+                printStudents(students)
+                ids = [student["studentID"] for student in students]
+                prompt = "Enter the student ID of the student you want to nominate: "
+                id = userInput.chooseFromList(int, prompt, ids)
 
-        db.commit()
+                name = cursor.execute(("SELECT studentName FROM students "
+                "WHERE studentID={0}").format(id)).fetchone()["studentName"]
 
-        if not userInput.yesno("Remove another student?: "):
-            return
+                removeStudent(id)
 
-        print()
+                print("{0} removed".format(name))
+
+            if not userInput.yesno("Delete another student? "):
+                return
+
+def removeStudent(id):
+    cursor.execute(("DELETE FROM student_in_tutor "
+    "WHERE studentID={0}".format(id)))
+
+    cursor.execute(("DELETE FROM candidates "
+    "WHERE studentID={0}".format(id)))
+
+    cursor.execute(("DELETE FROM students "
+    "WHERE studentID={0}".format(id)))
+
+    db.commit()
 
 def newTutor():
     while True:
@@ -309,11 +372,14 @@ def voterLogin():
 
     run = True
     while run:
+        cursor.execute("SELECT tutorID FROM tutor") 
+        tutors = [x["tutorID"] for x in cursor.fetchall()]
+        tutor = userInput.chooseFromList(str, "What tutor are you in? ", tutors)
         name = userInput.getStringInput("Please enter your full name: ", nameRegex).lower()
         date = userInput.getDate("Please enter your date of birth (dd/mm/yyyy): ", "Invalid date")
 
         date = datetime.datetime.strptime(date, '%d/%m/%Y').date().strftime("%Y-%m-%d")
-        cursor.execute("SELECT studentID FROM students WHERE studentName='{0}' AND dob='{1}'".format(name, date))
+        cursor.execute("SELECT * FROM students WHERE studentName='{0}' AND dob='{1}' and studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{2}')".format(name, date, tutor))
 
         student = cursor.fetchone()
 
@@ -322,7 +388,7 @@ def voterLogin():
             run = userInput.yesno("Try again? ")
         else:
             cursor.execute("SELECT tutorID FROM student_in_tutor WHERE studentID={0}".format(student["studentID"]))
-            return student["studentID"], cursor.fetchone()["tutorID"]
+            return student, cursor.fetchone()["tutorID"]
 
     return False
 
@@ -330,10 +396,67 @@ def addRandom(n, tutor):
     for i in range(n):
         addStudent(names.get_full_name(), getRandomDate(), tutor)
 
+def voteFor(studentID):
+    cursor.execute(("SELECT votes FROM candidates WHERE studentID='{0}'").format(studentID))
+    voteCount = cursor.fetchone()["votes"]
+
+    cursor.execute(("UPDATE candidates "
+            "SET votes={0} "
+            "WHERE studentID={1}".format(voteCount+1 if voteCount else 1, studentID)))
+
 def vote():
-    studentID = voterLogin()
-    if not studentID:
+    student, tutor = voterLogin()
+
+    if not student["studentID"]:
         return
+
+    if student["voted"]:
+        print("You have already voted")
+        return
+
+    if student["abstained"]:
+        print("You have abstained")
+        return
+
+    if not userInput.yesno("Do you want to vote? : "):
+        stmt = ("UPDATE students "
+                "SET abstained=1 "
+                "WHERE studentID={}".format(student["studentID"]))
+        cursor.execute(stmt)
+        db.commit()
+        return
+
+    cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    students = cursor.fetchall()
+    if students:
+        cursor.execute("SELECT * FROM students WHERE studentID IN {0}".format(str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
+        students = cursor.fetchall()
+        print("\n###{0} CANDIDATES###".format(tutor))
+        printCandidates(students)
+        print()
+    else:
+        print("There are no candidates for " + tutor)
+        return
+    
+    studentIDs = [student["studentID"] for student in students]
+    vote = userInput.chooseFromList(int, "Please enter the ID of the candidate you want to vote for: ", studentIDs)
+
+    voteFor(vote)
+
+    stmt = ("UPDATE students "
+            "SET voted=1 "
+            "WHERE studentID={}".format(student["studentID"]))
+    cursor.execute(stmt)
+
+    stmt = ("SELECT * FROM students "
+    "WHERE studentID={0}").format(vote)
+    cursor.execute(stmt)
+    student = cursor.fetchone()
+
+
+    print("You voted for", student["studentName"])
+
+    db.commit()
 
 def adminMenu(tutor):
     while True:
@@ -371,4 +494,4 @@ def menu():
         elif menuChoice == 3:
             exit()
 
-editStudents("11m")
+menu()
