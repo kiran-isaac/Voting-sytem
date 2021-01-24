@@ -113,7 +113,7 @@ def setPassword(confirm = False, prompt = None, outputFunc = print):
         if not prompt:
             prompt = "Enter your password: "
         if confirm:
-            password = getStringInput(prompt, "^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$", "Your password must be at least 8 digits long, and you need at least 1 capital letter and 1 digit in your password", stdiomask.getpass, outputFunc)
+            password = getStringInput(prompt, "^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$", "Your password must be at least 8 digits long, and you need at least 1 capital letter and 1 digit in your password", inputFunc=stdiomask.getpass)
             confirm = stdiomask.getpass("Confirm password: ")
             if password == confirm:
                 return password

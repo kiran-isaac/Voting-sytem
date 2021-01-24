@@ -1,10 +1,11 @@
+from os import truncate
 import mysql.connector
 import datetime
 import random
 import hashlib
 import userInput
 import names
-import os
+import matplotlib.pyplot as plt
 
 def getRandomDate():
     start_date = datetime.date(2000, 1, 1)
@@ -149,19 +150,22 @@ def nominateCandidates(tutor):
         print("No more candidates can be nominated")
         return
 
+    cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    students = cursor.fetchall()
+    cursor.execute("SELECT * FROM students WHERE studentID IN {0}".format(str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
+    students = cursor.fetchall()
+
+    print("Current candidates: ")
+    printCandidates(students)
+    print()
+
     cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
 
     nameRegex = "^[a-zA-Z,.'-]+$"
     counter = no
     while counter > 0:
-        firstName = userInput.getStringInput("Please enter the first name of the person you wish to nominate, or type view to see all students: ", nameRegex, ["view"])
-        if firstName == "view":
-            cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
-            students = cursor.fetchall()
-            printStudents(students)
-            print()
-            continue
+        firstName = userInput.getStringInput("Please enter the first name of the person you wish to nominate: ", nameRegex)
         stmt = (
             "SELECT * FROM students WHERE "
             "studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}') AND "
@@ -260,7 +264,7 @@ def removeStudents(tutor):
             if not students:
                 print("There are no students in {0}".format(0))
                 return
-            firstName = userInput.getStringInput("Please enter the first name of the person you wish to delete, or type view to see all students: ", nameRegex, ["view"])
+            firstName = userInput.getStringInput("Please enter the first name of the student you wish to remove: ", nameRegex)
             if firstName == "view":
                 cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
                 students = cursor.fetchall()
@@ -313,9 +317,15 @@ def removeStudent(id):
     db.commit()
 
 def newTutor():
+    cursor.execute("SELECT tutorID FROM tutor")
+    tutors = [x["tutorID"] for x in cursor.fetchall()]
     while True:
         tutorID = input("Enter new tutor group name: ")
         confirm = input("Confirm new tutor group name: ")
+        if tutorID in tutors:
+            print("Tutor '{0}' already exists".format(tutorID))
+            return
+
         if tutorID == confirm:
             break
 
@@ -334,7 +344,7 @@ def newTutor():
     username = username.lower()
     print()
 
-    password = userInput.passwordEntry(True)
+    password = userInput.setPassword(True)
 
     password = hashlib.sha1(bytes(password, "utf-8")).hexdigest()
 
@@ -346,6 +356,8 @@ def newTutor():
     cursor.execute(stmt)
 
     db.commit()
+
+    adminMenu(tutorID)
 
 def adminLogin():
     cursor.execute("SELECT tutorID FROM tutor")
@@ -407,7 +419,7 @@ def voteFor(studentID):
 def vote():
     student, tutor = voterLogin()
 
-    if not student["studentID"]:
+    if not student:
         return
 
     if student["voted"]:
@@ -420,7 +432,8 @@ def vote():
 
     if not userInput.yesno("Do you want to vote? : "):
         stmt = ("UPDATE students "
-                "SET abstained=1 "
+                "SET abstained=1, "
+                "voted=1 "
                 "WHERE studentID={}".format(student["studentID"]))
         cursor.execute(stmt)
         db.commit()
@@ -429,7 +442,7 @@ def vote():
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
     if students:
-        cursor.execute("SELECT * FROM students WHERE studentID IN {0}".format(str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
+        cursor.execute("SELECT * FROM students WHERE studentID<>{0} AND studentID IN {1}".format(student["studentID"], str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
         students = cursor.fetchall()
         print("\n###{0} CANDIDATES###".format(tutor))
         printCandidates(students)
@@ -458,20 +471,116 @@ def vote():
 
     db.commit()
 
+def getResults(tutor):
+    cursor.execute("SELECT voted, abstained FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    fetch = cursor.fetchall()
+    hasntVoted = [x["voted"] for x in fetch].count(None)
+    abstained = [x["abstained"] for x in fetch].count(1)
+    
+    cursor.execute("SELECT studentID, votes FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    results = cursor.fetchall()
+    ids = [x["studentID"] for x in results]
+    votes = [x["votes"] for x in results]
+
+    cursor.execute("SELECT studentName FROM students WHERE studentID IN ({})".format(str(ids)[1:-1]))
+    names = [x["studentName"] for x in cursor.fetchall()]
+
+    graphDict = {names[i] : votes[i] if votes[i] else 0 for i in range(len(names))}
+    graphDict["abstained"] = abstained
+    graphDict["not voted"] = hasntVoted
+
+    plt.bar(graphDict.keys(), graphDict.values(), color="g")
+    plt.show()
+
+def concludeVote(tutor):
+    cursor.execute("SELECT voted, abstained FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    fetch = cursor.fetchall()
+    hasntVoted = [x["voted"] for x in fetch].count(None)
+    abstained = [x["abstained"] for x in fetch].count(1)
+
+    if hasntVoted:
+        if not userInput.yesno("Are you sure? {0} people havn't yet voted or abstained? : ".format(hasntVoted)):
+            return
+
+    cursor.execute("SELECT studentID, votes FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    results = cursor.fetchall()
+    ids = [x["studentID"] for x in results]
+    votes = [x["votes"] if x["votes"] else 0 for x in results]
+
+    cursor.execute("SELECT studentName FROM students WHERE studentID IN ({})".format(str(ids)[1:-1]))
+    names = [x["studentName"] for x in cursor.fetchall()]
+
+    voteDict = {ids[i] : [names[i], votes[i]] for i in range(len(names))}
+    voteDict["abstained"] = ["abstained", abstained]
+
+    votes.sort(reverse=True)
+
+    mostVotes = votes[0]
+
+    haveMostVotes = [id for id, student in voteDict.items() if student[1] == mostVotes and id != "abstained"]
+    if len(haveMostVotes) == 1:
+        print(voteDict[haveMostVotes[0]][0], "wins!")
+        return
+
+    string = "There is a tie between "
+    names = [voteDict[id][0] for id in haveMostVotes] 
+    last = names.pop()
+    penultimate = names.pop()
+    for item in names:
+        string += str(item) + ", "
+    print(string + "{0} and {1}".format(penultimate, last))
+    names.append(penultimate)
+    names.append(last)
+
+    print("Resetting {} vote with only these candidates...".format(tutor))
+
+    cursor.execute("UPDATE students SET voted=NULL WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    cursor.execute("UPDATE students SET abstained=NULL WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+
+    cursor.execute("DELETE FROM candidates WHERE studentID NOT IN ({})".format(str(haveMostVotes)[1:-1]))
+    cursor.execute("UPDATE candidates SET votes=0")
+
+    db.commit()
+
+def resetVote(tutor):
+    if not userInput.yesno("Are you sure? All candidates will be deleted : "):
+        return
+    
+    cursor.execute("DELETE FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+
+    cursor.execute("UPDATE students SET voted=NULL WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    cursor.execute("UPDATE students SET abstained=NULL WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+
+    db.commit()
+
+    print("Vote reset")
+
 def adminMenu(tutor):
     while True:
         menu = """\n{0} ADMIN MENU:
     1) Edit Students
     2) Edit Candidates
-    3) Return to main menu
+    3) View votes so far
+    4) Conclude vote
+    5) Reset vote
+    6) Create new tutor
+    7) Return to main menu
 """.format(tutor)
 
-        menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3])
+        menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3, 4, 5, 6])
 
         if menuChoice == 1:
             editStudents(tutor)
         elif menuChoice == 2:
             editCandidates(tutor)
+        elif menuChoice == 3:
+            getResults(tutor)
+        elif menuChoice == 4:
+            concludeVote(tutor)
+        elif menuChoice == 5:
+            resetVote(tutor)
+        elif menuChoice == 6:
+            newTutor()
         else:
             return
 
@@ -494,4 +603,7 @@ def menu():
         elif menuChoice == 3:
             exit()
 
-menu()
+if __name__ == "__main__":
+    menu()
+
+concludeVote("11m")
