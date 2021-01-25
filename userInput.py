@@ -68,7 +68,7 @@ def getNumInRange(inputType, prompt, validate = None, error=None, inputFunc = in
             if error:
                 outputFunc(error)
             else:
-                outputFunc("Input must be between {0} and {1}".format(validate[0], validate[1]))
+                outputFunc("Please enter an integer between {0} and {1}".format(validate[0], validate[1]))
         if validate[0] >= validate[1]:
             raise ValueError
     except ValueError:

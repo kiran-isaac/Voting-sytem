@@ -28,7 +28,7 @@ def editCandidates(tutor):
     1) View candidates
     2) Nominate candidates
     3) Remove candidates
-    4) Return to tutor menu
+    4) Up one menu
 """.format(tutor)
         menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3, 4])
 
@@ -56,7 +56,7 @@ def editStudents(tutor):
     1) View students
     2) Add students
     3) Remove students
-    4) Return to tutor menu
+    4) Up one menu
 """.format(tutor)
 
         menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3, 4, 5])
@@ -121,8 +121,7 @@ def removeCandidates(tutor):
         removeCandidate(id)
 
         cursor.execute("SELECT studentName FROM students WHERE studentID={0}".format(id))
-        print("{0} removed".format(cursor.fetchone()["studentName"]))
-
+        print("{0} is no longer a candidate".format(cursor.fetchone()["studentName"]))
 
         cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
         students = cursor.fetchall()
@@ -150,9 +149,7 @@ def nominateCandidates(tutor):
         print("No more candidates can be nominated")
         return
 
-    cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
-    students = cursor.fetchall()
-    cursor.execute("SELECT * FROM students WHERE studentID IN {0}".format(str(tuple([student["studentID"] for student in students])).replace(",)", ")")))
+    cursor.execute("SELECT * FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
 
     print("Current candidates: ")
@@ -193,8 +190,9 @@ def nominateCandidates(tutor):
             print("{0} nominated".format(cursor.fetchone()["studentName"]))
             counter -= 1
 
-        if not userInput.yesno("Nominate another candiate? "):
-            return
+        if counter > 0:
+            if not userInput.yesno("Nominate another candiate? "):
+                return
     print("You have reached the maximum number of candidates")
 
 def nominateCandidate(studentID):
@@ -229,6 +227,10 @@ def addStudents(tutor):
 
     nameRegex = "^[a-zA-Z ,.'-]+$"
 
+    if userInput.yesno("Generate random students? "):
+        addRandom(no, tutor)
+        return
+
     print("Enter 'exit' at any time to stop")
     for i in range(no):
         while True:
@@ -236,11 +238,11 @@ def addStudents(tutor):
             name = userInput.getStringInput("Please enter their full name: ", nameRegex, ["exit"], "Name must only comtain letters, spaces, dashes, '-'. '.', ',' or '''")
             if name == "exit":
                 return
-            dobInput = userInput.getDate("Please enter their date of birth: ", ["exit"])
+            dobInput = userInput.getDate("Please enter their date of birth (dd/mm/yyyy): ", ["exit"])
             dob = datetime.datetime.strptime(dobInput, "%d/%m/%Y")
             if dob == "exit":
                 return
-            if userInput.yesno("Is this correct? : '{0}' born on '{1}'".format(name, dobInput)):
+            if userInput.yesno("Is this correct? : '{0}' born on '{1}' : ".format(name, dobInput)):
                 addStudent(name, dob, tutor)
                 print()
                 break
@@ -344,7 +346,7 @@ def newTutor():
     username = username.lower()
     print()
 
-    password = userInput.setPassword(True)
+    password = userInput.setPassword(True, "Enter tutor admin username")
 
     password = hashlib.sha1(bytes(password, "utf-8")).hexdigest()
 
@@ -357,7 +359,7 @@ def newTutor():
 
     db.commit()
 
-    adminMenu(tutorID)
+    tutorAdminMenu(tutorID)
 
 def adminLogin():
     cursor.execute("SELECT tutorID FROM tutor")
@@ -431,13 +433,15 @@ def vote():
         return
 
     if not userInput.yesno("Do you want to vote? : "):
-        stmt = ("UPDATE students "
-                "SET abstained=1, "
-                "voted=1 "
-                "WHERE studentID={}".format(student["studentID"]))
-        cursor.execute(stmt)
-        db.commit()
-        return
+        if userInput.yesno("Are you sure you want to abstain? This is irreversible"):
+            stmt = ("UPDATE students "
+                    "SET abstained=1, "
+                    "voted=1 "
+                    "WHERE studentID={}".format(student["studentID"]))
+            cursor.execute(stmt)
+            db.commit()
+            print("You have abstained")
+            return
 
     cursor.execute("SELECT * FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     students = cursor.fetchall()
@@ -450,28 +454,35 @@ def vote():
     else:
         print("There are no candidates for " + tutor)
         return
-    
-    studentIDs = [student["studentID"] for student in students]
-    vote = userInput.chooseFromList(int, "Please enter the ID of the candidate you want to vote for: ", studentIDs)
 
-    voteFor(vote)
+    while True:
+        studentIDs = [student["studentID"] for student in students]
+        vote = userInput.chooseFromList(int, "Please enter the ID of the candidate you want to vote for: ", studentIDs)
+        
+        stmt = ("SELECT * FROM students "
+        "WHERE studentID={0}").format(vote)
+        cursor.execute(stmt)
+        student = cursor.fetchone()
 
-    stmt = ("UPDATE students "
-            "SET voted=1 "
-            "WHERE studentID={}".format(student["studentID"]))
-    cursor.execute(stmt)
+        print("You voted for", student["studentName"])
 
-    stmt = ("SELECT * FROM students "
-    "WHERE studentID={0}").format(vote)
-    cursor.execute(stmt)
-    student = cursor.fetchone()
+        if userInput.yesno("Are you sure you want to vote for {0}"):
+            voteFor(vote)
 
+            stmt = ("UPDATE students "
+                    "SET voted=1 "
+                    "WHERE studentID={}".format(student["studentID"]))
+            cursor.execute(stmt)
 
-    print("You voted for", student["studentName"])
-
-    db.commit()
+            db.commit()
 
 def getResults(tutor):
+    cursor.execute("SELECT * FROM CANDIDATES WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    candidates = cursor.fetchall()
+    if not candidates:
+        print("There are no candidates for {}".format(tutor))
+        return
+
     cursor.execute("SELECT voted, abstained FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     fetch = cursor.fetchall()
     hasntVoted = [x["voted"] for x in fetch].count(None)
@@ -493,6 +504,12 @@ def getResults(tutor):
     plt.show()
 
 def concludeVote(tutor):
+    cursor.execute("SELECT * FROM CANDIDATES WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    candidates = cursor.fetchall()
+    if not candidates:
+        print("There are no candidates for {}".format(tutor))
+        return
+
     cursor.execute("SELECT voted, abstained FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
     fetch = cursor.fetchall()
     hasntVoted = [x["voted"] for x in fetch].count(None)
@@ -543,7 +560,7 @@ def concludeVote(tutor):
     db.commit()
 
 def resetVote(tutor):
-    if not userInput.yesno("Are you sure? All candidates will be deleted : "):
+    if not userInput.yesno("Are you sure? All data on the current vote will be lost : "):
         return
     
     cursor.execute("DELETE FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
@@ -555,19 +572,52 @@ def resetVote(tutor):
 
     print("Vote reset")
 
-def adminMenu(tutor):
+def deleteTutor():
+    print("\nPlease log in as admin: ")
+
+    login = adminLogin()
+    if not login:
+        return
+
+    if login != "admin":
+        print("You must sign in as admin")
+        return
+
+    cursor.execute("SELECT tutorID FROM tutor")
+    tutors = [x["tutorID"] for x in cursor.fetchall()]
+
+    if not tutors:
+        print("There are no tutors")
+        return
+
+    tutor = userInput.chooseFromList(str, "Choose a tutor to delete? ", tutors)
+
+    if not userInput.yesno("Delete {} and all associated data? : ".format(tutor)):
+        return
+
+    cursor.execute("DELETE FROM student_in_tutor WHERE tutorID = '{}'".format(tutor))
+    cursor.execute("DELETE FROM candidates WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    cursor.execute("DELETE FROM students WHERE studentID IN (SELECT studentID FROM student_in_tutor WHERE tutorID='{0}')".format(tutor))
+    cursor.execute("DELETE FROM tutor WHERE tutorID = '{}'".format(tutor))
+
+    db.commit()
+
+    print("{} deleted".format(tutor))
+
+    return True
+
+def tutorAdminMenu(tutor):
     while True:
-        menu = """\n{0} ADMIN MENU:
+        menu = """\n{0} TUTOR MENU:
     1) Edit Students
     2) Edit Candidates
     3) View votes so far
     4) Conclude vote
     5) Reset vote
-    6) Create new tutor
-    7) Return to main menu
+    6) Up one menu
 """.format(tutor)
 
-        menuChoice = userInput.chooseFromList(int, menu, [1, 2, 3, 4, 5, 6])
+        menuChoice = userInput.getNumInRange(int, menu, (1, 6))
 
         if menuChoice == 1:
             editStudents(tutor)
@@ -579,8 +629,23 @@ def adminMenu(tutor):
             concludeVote(tutor)
         elif menuChoice == 5:
             resetVote(tutor)
-        elif menuChoice == 6:
+        else:
+            return
+
+def adminMenu():
+    while True:
+        menu = """\nADMIN MENU:
+    1) Create new tutor
+    2) Delete tutor
+    3) Up one menu
+""".format()
+
+        menuChoice = userInput.getNumInRange(int, menu, (1, 3))
+
+        if menuChoice == 1:
             newTutor()
+        elif menuChoice == 2:
+            deleteTutor()
         else:
             return
 
@@ -588,22 +653,23 @@ def menu():
     while True:
         menu = """\nMAIN MENU : 
     1) Cast vote
-    2) Tutor admin menu
+    2) Teacher sign in
     3) Exit
 """
 
-        menuChoice = userInput.chooseFromList(int, menu, [1, 2])
+        menuChoice = userInput.getNumInRange(int, menu, (1, 3))
 
         if menuChoice == 1:
             vote()
         elif menuChoice == 2:
             tutor = adminLogin()
             if tutor:
-                adminMenu(tutor)
+                if tutor == "admin":
+                    adminMenu()
+                else:
+                    tutorAdminMenu(tutor)
         elif menuChoice == 3:
             exit()
 
 if __name__ == "__main__":
     menu()
-
-concludeVote("11m")
